@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Snowy Demo</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%232f6f73'/%3E%3Cpath d='M16 19h32v6H16zm0 10h21v6H16zm0 10h32v6H16z' fill='white'/%3E%3C/svg%3E">
+    <style>
+        :root {
+            color: #1f2937;
+            background: #f6f8fb;
+            font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        .shell {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 28px 20px 40px;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #d6dee8;
+            padding-bottom: 16px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 26px;
+        }
+
+        .status {
+            border: 1px solid #b7c5d8;
+            background: #ffffff;
+            border-radius: 6px;
+            padding: 8px 12px;
+            min-width: 170px;
+            text-align: center;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 16px;
+        }
+
+        section {
+            background: #ffffff;
+            border: 1px solid #d6dee8;
+            border-radius: 8px;
+            padding: 16px;
+            min-height: 180px;
+        }
+
+        h2 {
+            margin: 0 0 12px;
+            font-size: 18px;
+        }
+
+        ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        li {
+            margin: 8px 0;
+            line-height: 1.45;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid #e5ebf2;
+            padding: 8px 6px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            color: #526174;
+            font-weight: 600;
+        }
+
+        code {
+            background: #eef3f8;
+            border-radius: 4px;
+            padding: 2px 5px;
+        }
+
+        @media (max-width: 820px) {
+            header,
+            .grid {
+                display: block;
+            }
+
+            .status {
+                margin-top: 12px;
+                text-align: left;
+            }
+
+            section {
+                margin-top: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+<main class="shell">
+    <header>
+        <div>
+            <h1>Simple Snowy Demo</h1>
+            <p>一个 Spring Boot 启动模块，加载多个业务插件模块。</p>
+        </div>
+        <div class="status" id="status">正在连接后端</div>
+    </header>
+
+    <div class="grid">
+        <section>
+            <h2>当前用户</h2>
+            <div id="user">加载中</div>
+        </section>
+
+        <section>
+            <h2>系统菜单</h2>
+            <ul id="menus">
+                <li>加载中</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>CRM 客户</h2>
+            <table>
+                <thead>
+                <tr>
+                    <th>客户</th>
+                    <th>负责人</th>
+                    <th>等级</th>
+                </tr>
+                </thead>
+                <tbody id="customers">
+                <tr>
+                    <td colspan="3">加载中</td>
+                </tr>
+                </tbody>
+            </table>
+        </section>
+    </div>
+</main>
+
+<script>
+    const baseUrl = 'http://localhost:8080';
+
+    async function loadJson(path) {
+        const response = await fetch(`${baseUrl}${path}`);
+        if (!response.ok) {
+            throw new Error(`${path} returned ${response.status}`);
+        }
+        return response.json();
+    }
+
+    async function render() {
+        const [userResult, menuResult, customerResult] = await Promise.all([
+            loadJson('/api/auth/me'),
+            loadJson('/api/sys/menus'),
+            loadJson('/api/crm/customers')
+        ]);
+
+        const user = userResult.data;
+        document.querySelector('#user').innerHTML = `
+            <p><strong>${user.displayName}</strong></p>
+            <p>账号：<code>${user.username}</code></p>
+        `;
+
+        document.querySelector('#menus').innerHTML = menuResult.data
+            .map(menu => `<li><strong>${menu.title}</strong><br><code>${menu.path}</code></li>`)
+            .join('');
+
+        document.querySelector('#customers').innerHTML = customerResult.data
+            .map(customer => `
+                <tr>
+                    <td>${customer.name}</td>
+                    <td>${customer.owner}</td>
+                    <td>${customer.level}</td>
+                </tr>
+            `)
+            .join('');
+
+        document.querySelector('#status').textContent = '后端连接成功';
+    }
+
+    render().catch(error => {
+        document.querySelector('#status').textContent = '后端未启动';
+        document.querySelector('#user').textContent = error.message;
+        document.querySelector('#menus').innerHTML = '<li>请先启动 snowy-web-app</li>';
+        document.querySelector('#customers').innerHTML = '<tr><td colspan="3">暂无数据</td></tr>';
+    });
+</script>
+</body>
+</html>
