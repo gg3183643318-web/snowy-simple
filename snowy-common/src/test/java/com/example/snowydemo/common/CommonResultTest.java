@@ -14,4 +14,16 @@ class CommonResultTest {
         assertThat(result.getMessage()).isEqualTo("success");
         assertThat(result.getData()).isEqualTo("hello");
     }
+
+    @Test
+    void createsHttpAlignedResponseBodies() {
+        CommonResult<String> created = CommonResult.created("customer");
+        CommonResult<Void> denied = CommonResult.error(403, "没有操作权限");
+
+        assertThat(created.getCode()).isEqualTo(201);
+        assertThat(created.getData()).isEqualTo("customer");
+        assertThat(denied.getCode()).isEqualTo(403);
+        assertThat(denied.getMessage()).isEqualTo("没有操作权限");
+        assertThat(denied.getData()).isNull();
+    }
 }

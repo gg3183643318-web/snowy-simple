@@ -16,6 +16,14 @@ public class CommonResult<T> {
         return new CommonResult<>(200, "success", data);
     }
 
+    public static <T> CommonResult<T> created(T data) {
+        return new CommonResult<>(201, "created", data);
+    }
+
+    public static <T> CommonResult<T> error(int code, String message) {
+        return new CommonResult<>(code, message, null);
+    }
+
     public static CommonResult<String> ok() {
         return new CommonResult<>(200, "success", "ok");
     }
