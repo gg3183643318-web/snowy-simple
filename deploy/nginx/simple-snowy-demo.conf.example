@@ -1,0 +1,38 @@
+# 这是教学用的 Nginx 配置片段，不是完整的 nginx.conf。
+# 文件使用 .example 后缀，项目没有把它放进任何 Nginx include 路径，Nginx 也不会自动扫描项目目录，
+# 所以它默认不会生效。只有你主动替换占位路径，并把它复制到或显式 include 到已加载的配置中，它才可能启用。
+#
+# 同一个 Nginx 进程可以配置多个 server 块，类似一个 Gateway 应用可以配置多条路由；Nginx 会先根据
+# 请求到达的端口和 Host 请求头选择 server，再在选中的 server 内根据 URI 选择 location。
+server {
+    # 监听 18090 端口。它与 Spring Boot 的 8080、当前静态页面的 8091 分开，避免教学示例抢占现有端口。
+    listen 18090;
+
+    # 匹配 HTTP 请求中的 Host。DNS 只负责把 simple-snowy-demo.local 解析成 IP，
+    # 真正选择这个 server 块的是 Nginx 对监听端口和 Host/server_name 的匹配。
+    server_name simple-snowy-demo.local;
+
+    # root 是前端静态文件所在目录，必须使用替换后的真实绝对路径；这里故意保留通用占位路径。
+    # index 表示访问目录（例如 /）时，默认尝试返回 index.html。
+    root /absolute/path/to/simple-snowy-demo/snowy-admin-web;
+    index index.html;
+
+    # URI 以 /api/ 开头时，不读取静态文件，而是反向代理到 Spring Boot 的 8080 端口。
+    # proxy_pass 末尾没有额外的 /，因此原始 URI（例如 /api/crm/customers）会完整转发给后端。
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+
+        # 把浏览器原始 Host 传给后端，后端需要时可以知道用户访问的域名。
+        proxy_set_header Host $host;
+        # 记录直接连接到 Nginx 的客户端 IP；否则后端通常只能看到 Nginx 的地址。
+        proxy_set_header X-Real-IP $remote_addr;
+        # 在已有代理链后追加客户端 IP，便于多层代理场景追踪请求经过的地址。
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # 其余 URI 作为前端静态资源处理。先找同名文件，再找同名目录；都找不到时回退到 index.html。
+    # 最后的回退是 SPA 常用写法：浏览器刷新 /customers 这类前端路由时，仍由 index.html 接管。
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
