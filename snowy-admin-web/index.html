@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simple Snowy 请求实验室</title>
+    <link rel="icon" href="data:,">
     <style>
         :root {
             color: #202724;
@@ -746,51 +747,58 @@
 
     /**
      * 所有后端调用都经过这个函数。它像前端统一的 HTTP 客户端：负责补请求头、发送请求，
-     * 再把 HTTP 状态、响应头和响应体一起交给检查器展示。
+     * 再按 inspect 选项决定是否把 HTTP 状态、响应头和响应体交给检查器展示。
      */
     async function request(path, options = {}) {
+        // inspect 是实验室自己的显示选项，不属于 fetch 标准配置；先拆出来，避免把它发送给浏览器网络 API。
+        const {inspect = true, ...fetchOptions} = options;
+
         // options.method 没传时，fetch 默认使用 GET；这里显式算出 method，方便检查器展示本次请求事实。
-        const method = options.method || 'GET';
+        const method = fetchOptions.method || 'GET';
         const token = localStorage.getItem(tokenKey);
 
         // headers 携带的是 HTTP 元数据，例如登录 token 和请求体类型。Headers 能合并普通对象、
         // 键值数组或另一个 Headers；随后再补公共字段，作用类似 Gateway 或拦截器统一增加请求信息。
-        const headers = new Headers(options.headers || {});
+        const headers = new Headers(fetchOptions.headers || {});
         if (token) headers.set('token', token);
 
         // HTTP 网络上传输的 body 是文本/字节，不是 JavaScript 对象本身。因此调用 POST、PUT 时要先用
         // JSON.stringify(object) 变成 JSON 文本；只有确实存在 body 时才声明 application/json。
-        if (options.body !== undefined && options.body !== null) {
+        if (fetchOptions.body !== undefined && fetchOptions.body !== null) {
             headers.set('Content-Type', 'application/json');
         }
 
-        renderInspector({
-            method,
-            path,
-            status: '请求中',
-            traceId: '-',
-            handler: '-',
-            result: {message: '等待后端响应'},
-            state: 'loading'
-        });
+        if (inspect) {
+            renderInspector({
+                method,
+                path,
+                status: '请求中',
+                traceId: '-',
+                handler: '-',
+                result: {message: '等待后端响应'},
+                state: 'loading'
+            });
+        }
         setBackendStatus('请求中', 'loading');
 
         let response;
         try {
             // fetch 会立即返回 Promise。await 表示等这个异步结果回来后再继续当前函数，期间不会阻塞
             // 浏览器主线程，页面仍然可以完成绘制；按钮禁用是为了避免重复操作，不是因为浏览器卡住。
-            response = await fetch(`${baseUrl}${path}`, {...options, headers});
+            response = await fetch(`${baseUrl}${path}`, {...fetchOptions, headers});
         } catch (error) {
             setBackendStatus('无法连接', 'error');
-            renderInspector({
-                method,
-                path,
-                status: '网络错误',
-                traceId: '-',
-                handler: '-',
-                result: {message: error.message || '无法连接后端'},
-                state: 'error'
-            });
+            if (inspect) {
+                renderInspector({
+                    method,
+                    path,
+                    status: '网络错误',
+                    traceId: '-',
+                    handler: '-',
+                    result: {message: error.message || '无法连接后端'},
+                    state: 'error'
+                });
+            }
             throw error;
         }
 
@@ -810,23 +818,25 @@
 
         const traceId = response.headers.get('X-Trace-Id');
         const handler = response.headers.get('X-Handler');
-        renderInspector({
-            method,
-            path,
-            status: response.status,
-            traceId,
-            handler,
-            result,
-            state: response.ok ? 'success' : 'error'
-        });
+        if (inspect) {
+            renderInspector({
+                method,
+                path,
+                status: response.status,
+                traceId,
+                handler,
+                result,
+                state: response.ok ? 'success' : 'error'
+            });
+        }
         setBackendStatus('已响应', 'connected');
 
         if (response.status === 401) {
             clearSession();
         }
 
-        // response.ok 只在 HTTP 2xx 时为 true。401、403、404、500 都会进入这里，保留检查器中的
-        // 原始响应事实后再抛错，让具体按钮流程显示清晰错误，而不是用 alert 打断页面。
+        // response.ok 只在 HTTP 2xx 时为 true。401、403、404、500 都会进入这里；可见请求已保留
+        // 原始响应事实，静默请求则不改检查器，但两者都会抛错并让按钮流程显示错误，不使用 alert。
         const resultMessage = result && typeof result === 'object' ? result.message : '';
         if (!response.ok) {
             throw new Error(resultMessage || `HTTP ${response.status}`);
@@ -905,9 +915,9 @@
         renderCustomers();
     }
 
-    async function loadCustomers() {
+    async function loadCustomers({inspect = true} = {}) {
         // GET 没有请求体，也可以不写 method；request() 会展示它最终采用的默认 GET 方法。
-        const result = await request('/api/crm/customers');
+        const result = await request('/api/crm/customers', {inspect});
         customers = Array.isArray(result && result.data) ? result.data : [];
         renderCustomers();
         return customers;
@@ -1007,7 +1017,8 @@
                 })
             });
             selectedCustomerId = result.data.id;
-            await loadCustomers();
+            // 静默执行后续 GET，只刷新表格，不覆盖刚才 POST 的状态、响应头和响应体。
+            await loadCustomers({inspect: false});
             setOperationStatus(`已新增并选中客户 #${selectedCustomerId}`, 'success');
         });
     });
@@ -1025,7 +1036,7 @@
                 body: JSON.stringify(changedCustomer(selected))
             });
             selectedCustomerId = result.data.id;
-            await loadCustomers();
+            await loadCustomers({inspect: false});
             setOperationStatus(`已修改并选中客户 #${selectedCustomerId}`, 'success');
         });
     });
@@ -1040,7 +1051,7 @@
         runOperation(elements.deleteButton, `正在删除客户 #${selected.id}`, async () => {
             await request(`/api/crm/customers/${selected.id}`, {method: 'DELETE'});
             selectedCustomerId = null;
-            await loadCustomers();
+            await loadCustomers({inspect: false});
             setOperationStatus(`已删除客户 #${selected.id}`, 'success');
         });
     });
