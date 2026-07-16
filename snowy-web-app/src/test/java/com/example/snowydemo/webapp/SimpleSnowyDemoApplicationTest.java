@@ -42,7 +42,11 @@ class SimpleSnowyDemoApplicationTest {
                 new HttpEntity<>(tokenHeaders),
                 String.class).getBody();
         String menus = restTemplate.getForObject("/api/sys/menus", String.class);
-        String customers = restTemplate.getForObject("/api/crm/customers", String.class);
+        String customers = restTemplate.exchange(
+                "/api/crm/customers",
+                HttpMethod.GET,
+                new HttpEntity<>(tokenHeaders),
+                String.class).getBody();
 
         assertThat(currentUser).contains("admin");
         assertThat(menus).contains("客户管理");
