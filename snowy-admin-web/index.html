@@ -762,9 +762,8 @@
         const headers = new Headers(fetchOptions.headers || {});
         if (token) headers.set('token', token);
 
-        // HTTP 网络上传输的 body 是文本/字节，不是 JavaScript 对象本身。因此调用 POST、PUT 时要先用
-        // JSON.stringify(object) 变成 JSON 文本；只有确实存在 body 时才声明 application/json。
-        if (fetchOptions.body !== undefined && fetchOptions.body !== null) {
+        // 本页 POST、PUT 的 body 都是 JSON；调用方若已声明其他类型，则保留它自己的 Content-Type。
+        if (fetchOptions.body !== undefined && fetchOptions.body !== null && !headers.has('Content-Type')) {
             headers.set('Content-Type', 'application/json');
         }
 
@@ -802,9 +801,36 @@
             throw error;
         }
 
-        // status 和 headers 是 HTTP 响应元数据；response.json()/response.text() 读取的则是响应体，
-        // 它们彼此分开。这里先读 text，再尝试 JSON.parse，后端即使返回非 JSON 文本也能正常展示。
-        const responseText = await response.text();
+        const traceId = response.headers.get('X-Trace-Id');
+        const handler = response.headers.get('X-Handler');
+
+        // 响应头到达后，响应体仍可能因连接中断读取失败；此时保留状态码和响应头，并继续处理 401。
+        let responseText;
+        try {
+            responseText = await response.text();
+        } catch (error) {
+            const errorDetail = error && typeof error.message === 'string' ? error.message : '';
+            const readErrorMessage = errorDetail ? `响应体读取失败：${errorDetail}` : '响应体读取失败';
+
+            setBackendStatus('响应读取失败', 'error');
+            if (response.status === 401) {
+                clearSession();
+            }
+            if (inspect) {
+                renderInspector({
+                    method,
+                    path,
+                    status: response.status,
+                    traceId,
+                    handler,
+                    result: {code: 'RESPONSE_READ_ERROR', message: readErrorMessage},
+                    state: 'error'
+                });
+            }
+            throw new Error(`RESPONSE_READ_ERROR：${readErrorMessage}`);
+        }
+
+        // 先读 text 再尝试 JSON.parse，后端即使返回非 JSON 文本也能正常展示。
         let result;
         if (!responseText) {
             result = null;
@@ -816,8 +842,6 @@
             }
         }
 
-        const traceId = response.headers.get('X-Trace-Id');
-        const handler = response.headers.get('X-Handler');
         if (inspect) {
             renderInspector({
                 method,
