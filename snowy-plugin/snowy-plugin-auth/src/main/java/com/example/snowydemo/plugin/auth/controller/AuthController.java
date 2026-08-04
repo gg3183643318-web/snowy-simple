@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+//111111111111111111111111111111111111111
 /**
  * 认证接口的 HTTP 入口。
  *
@@ -37,8 +38,14 @@ public class AuthController {
      * 接收形如 {@code {"username":"admin"}} 的 JSON。JSON 绑定和参数校验发生在方法执行之前，
      * 所以空账号不会进入 AuthService；合法账号则由 Service 建立 Sa-Token 登录会话并返回 token。
      */
+    // HandlerMapping 使用“POST + /api/auth/login”找到这个 Controller 方法，此时方法还没有执行。
     @PostMapping("/api/auth/login")
+    // DispatcherServlet 随后通过 HandlerAdapter 解析参数：
+    // 1. @RequestBody 选择 Jackson，把 HTTP 请求体 JSON 转成 LoginRequestDTO；
+    // 2. @Valid 调用 Validator，检查 DTO 字段上的 @NotBlank；
+    // 3. 两步都成功后，才把 request 传进来并执行下面的方法体。
     public CommonResult<LoginResultDTO> login(@RequestBody @Valid LoginRequestDTO request) {
+        // 取出 DTO 中的 username，调用 Service 完成登录，再把 token 和用户信息包装成统一响应。
         return CommonResult.data(authService.login(request.username()));
     }
 
